@@ -1,8 +1,10 @@
 import os
-from flask import Flask, request, abort, jsonify
+from flask import Flask, request, abort, jsonify, abort
 from flask_sqlalchemy import SQLAlchemy  # , or_
 from flask_cors import CORS
 import random
+
+from sqlalchemy.sql.expression import null
 
 from models import setup_db, Book
 
@@ -31,6 +33,73 @@ def create_app(test_config=None):
             "Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS"
         )
         return response
+
+
+    @app.route('/books')
+    def get_books():
+        page = request.args.get('page', 1, type=int)
+        start = (page - 1) * BOOKS_PER_SHELF
+        end = start + BOOKS_PER_SHELF
+        books = Book.query.all()
+        formated_books = [book.format() for book in books]
+        if not formated_books[start:end]:
+            return abort(404)
+
+
+        return jsonify({
+            'success': True,
+            'books': formated_books[start:end],
+            'total_books': len(formated_books)
+        })
+
+    @app.route('/books/<int:book_id>', methods=['PATCH'])    
+    def patch_rating(book_id):
+        book = Book.query.get(book_id)
+        if book == None:
+            return abort(404)
+        rating = request.get_json()['rating']
+        book.rating = rating
+        book.update()
+
+        return jsonify({
+            'success':True,
+            'message':f'the ratings of id {book_id} are updated'
+        })
+
+    @app.route('/books/<int:book_id>', methods=['DELETE'])
+    def delete_book(book_id):
+        book = Book.query.get(book_id)
+        if book == None:
+            return abort(404)
+        book.delete()
+
+        return jsonify({
+            'success':True,
+            'message':f'book with id {book_id} has been deleted'
+        })
+
+    @app.route('/books/create', methods=['POST'])
+    def create_book():
+        title = request.get_json()['title']
+        author = request.get_json()['author']
+        rating = request.get_json()['rating']
+
+        new_book = Book(title=title, author=author, rating=rating)
+        new_book.insert()
+
+        return jsonify({
+            'success':True,
+            'message':'new book created'
+        })
+
+
+    @app.errorhandler(404)
+    def not_found(error):
+        return jsonify({
+            'success': False,
+            'error': 404,
+            'message': 'resource not found'
+        })
 
     # @TODO: Write a route that retrivies all books, paginated.
     #         You can use the constant above to paginate by eight books.
